@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+  <data>
+    <!-- Event Form -->
+    <record id="view_event_form_inherit_amgen" model="ir.ui.view">
+      <field name="name">event.form.inherit</field>
+      <field name="model">event.event</field>
+      <field name="inherit_id" ref="event.view_event_form"/>
+      <field name="arch" type="xml">
+        <field name="stage_id" position="attributes">
+          <attribute name="clickable">1</attribute>
+        </field>
+        <field name="date_begin" position="attributes">
+          <attribute name="attrs">{'readonly': [('stage_id', '!=', 1)]}</attribute>
+        </field>
+        <field name="date_end" position="attributes">
+          <attribute name="attrs">{'readonly': [('stage_id', '!=', 1)]}</attribute>
+        </field>
+        <field name="organizer_id" position="attributes">
+          <attribute name="domain">[('category_id.name','=','Organizador')]</attribute>
+        </field>
+        <xpath expr="//field[@name='organizer_id']" position="after">
+          <field name="speaker_id" domain="[('category_id.name', '=', 'Ponente')]" />
+        </xpath>
+        <xpath expr="//field[@name='user_id']" position="after">
+          <field name="moderator_ids" widget="many2many_tags" />
+        </xpath>
+        <field name="address_id" position="attributes">
+          <attribute name="string">Lugar</attribute>
+          <attribute name="domain">[('category_id.name', '=', 'Lugar')]</attribute>
+        </field>
+        <xpath expr="//field[@name='auto_confirm']" position="after">
+          <field name="zoom_link" />
+          <field name="zoom_pass" />
+        </xpath>
+        <xpath expr="//label[@for='seats_limited']" position="attributes">
+          <attribute name="string">Limitar lugares</attribute>
+        </xpath>
+        <field name="auto_confirm" position="attributes">
+          <attribute name="invisible">1</attribute>
+        </field>
+        <xpath expr="//header" position="inside">
+          <button name="action_send_event_mail" string="Enviar Invitación" type="object" class="oe_highlight"
+              attrs="{'invisible': [('stage_id', '!=', 3)]}" />
+        </xpath>
+      </field>
+    </record>
+
+    <!-- Event Registration -->
+    <record id="view_event_registration_form_inherit_amgen" model="ir.ui.view">
+      <field name="name">event.registration.form.inherit</field>
+      <field name="model">event.registration</field>
+      <field name="inherit_id" ref="event.view_event_registration_form"/>
+      <field name="arch" type="xml">
+        <field name="partner_id" position="attributes">
+          <attribute name="string">Reservado para</attribute>
+          <attribute name="domain">[('category_id.name', '=', 'Participante')]</attribute>
+        </field>
+        <xpath expr="//field[@name='mobile']" position="after">
+          <field name="specialty" />
+        </xpath>
+        <xpath expr="//field[@name='sale_order_id']/parent::group" position="attributes">
+          <attribute name="invisible">1</attribute>
+        </xpath>
+        <xpath expr="//group[@name='utm_link']" position="attributes">
+          <attribute name="invisible">1</attribute>
+        </xpath>
+        <xpath expr="//field[@name='date_open']" position="after">
+          <field name="pre_state" />
+        </xpath>
+      </field>
+    </record>
+  </data>
+</odoo>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <record id="partner_category_event" model="res.partner.category">
+        <field name="name">Eventos</field>
+    </record>
+    <record id="partner_category_venue" model="res.partner.category">
+        <field name="name">Lugar</field>
+        <field name="parent_id" ref="partner_category_event"/>
+    </record>
+    <record id="partner_category_organizer" model="res.partner.category">
+        <field name="name">Organizador</field>
+        <field name="parent_id" ref="partner_category_event"/>
+    </record>
+    <record id="partner_category_speaker" model="res.partner.category">
+        <field name="name">Ponente</field>
+        <field name="parent_id" ref="partner_category_event"/>
+    </record>
+    <record id="partner_category_moderator" model="res.partner.category">
+        <field name="name">Moderador</field>
+        <field name="parent_id" ref="partner_category_event"/>
+    </record>
+    <record id="partner_category_participant" model="res.partner.category">
+        <field name="name">Participante</field>
+        <field name="parent_id" ref="partner_category_event"/>
+    </record>
+
+    <record id="partner_zoom" model="res.partner">
+        <field name="name">Zoom</field>
+        <field name="category_id" eval="[(4, ref('partner_category_venue'))]"/>
+    </record>
+
+    <record id="event_tag_category_conference" model="event.tag.category">
+        <field name="name">Conferencia</field>
+    </record>
+    <record id="event_tag_zoom" model="event.tag">
+        <field name="name">Zoom</field>
+        <field name="color">2</field>
+        <field name="category_id" ref="event_tag_category_conference"/>
+    </record>
+    <record id="event_type_zoom" model="event.type">
+        <field name="name">Zoom</field>
+        <field name="use_mail_schedule">0</field>
+        <field name="tag_ids" eval="[(4, ref('event_tag_zoom'))]"/>
+    </record>
+</odoo>
