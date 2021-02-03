@@ -29,6 +29,8 @@
         'views/partner_views.xml',
         'views/event_views.xml',
         'views/purchase_views.xml',
+        'report/event_event_templates.xml',
+        'report/event_event_reports.xml',
         'data/initial_data.xml',
         'data/email_template_data.xml',
     ],

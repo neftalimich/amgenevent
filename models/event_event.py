@@ -17,6 +17,7 @@ class EventEvent(models.Model):
         domain="[('category_id.name', '=', 'Moderador')]"
     )
 
+    zoom_id = fields.Char(string='Id Zoom')
     zoom_link = fields.Char(string='Enlace Zoom')
     zoom_pass = fields.Char(string='Password Zoom')
 

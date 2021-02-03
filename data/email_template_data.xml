@@ -14,6 +14,10 @@
                     Enlace Zoom: ${object.zoom_link or ''}
                 </div>
             </field>
+            <field name="report_template" ref="report_event_event_invitation"/>
+            <field name="report_name">Invitación Evento: ${(object.name or '').replace('/','_')}</field>
+            <field name="lang">${object.organizer_id.lang}</field>
+            <field name="auto_delete" eval="True"/>
         </record>
     </data>
 </odoo>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <template id="event_event_report_template_invitation">
+        <t t-call="web.basic_layout">
+            <t t-foreach="docs" t-as="o">
+                <h2 t-field="o.name" />
+            </t>
+        </t>
+    </template>
+</odoo>
