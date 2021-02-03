@@ -3,7 +3,14 @@
     <template id="event_event_report_template_invitation">
         <t t-call="web.basic_layout">
             <t t-foreach="docs" t-as="o">
+                <img t-if="o.user_id.company_id.logo"
+                     t-att-src="image_data_uri(o.user_id.company_id.logo)"
+                     style="max-height:80px; height: auto" alt="Company Logo"/>
+
+                <h2 t-field="o.user_id.company_id.name" />
                 <h2 t-field="o.name" />
+                <br />
+                <span f-field="o.zoom_link"></span>
             </t>
         </t>
     </template>

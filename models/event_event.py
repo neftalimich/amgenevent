@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 
+import datetime
+import pytz
+import json
+import requests
+
+from datetime import datetime, time
+
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import DEFAULT_SERVER_DATETIME_FORMAT
 
 
 class EventEvent(models.Model):
@@ -18,8 +26,12 @@ class EventEvent(models.Model):
     )
 
     zoom_id = fields.Char(string='Id Zoom')
-    zoom_link = fields.Char(string='Enlace Zoom')
+    zoom_uuid = fields.Char()
+    zoom_host_id = fields.Char()
+    zoom_join_url = fields.Char()
+
     zoom_pass = fields.Char(string='Password Zoom')
+    zoom_link = fields.Char(string='Enlace Zoom')
 
     order_id = fields.Many2one(comodel_name='purchase.order', string='Compra')
 
@@ -57,7 +69,18 @@ class EventEvent(models.Model):
                 self.validate_event_date(self.date_begin, self.date_end)
             if current_stage_id == 2:
                 if new_stage_id == 3:
-                    self.zoom_link = self.create_zoom_meeting(self.date_begin, self.date_end)
+                    kwargs = {
+                        "topic": self.name,
+                        "type": 2,
+                        "password": self.zoom_pass or "",
+                        "start_time": self._datetime_localize(self.date_begin),
+                        "duration": int((self.date_end - self.date_begin).total_seconds() / 60),
+                        "timezone": self.env.user.tz,
+                        "agenda": ""
+                    }
+
+                    self.create_zoom_meeting(kwargs)
+
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
 
         if 'date_begin' in vals or 'date_end' in vals:
@@ -74,6 +97,41 @@ class EventEvent(models.Model):
 
         return super(EventEvent, self).write(vals)
 
+    # ZOOM API
+    def create_zoom_meeting(self, kwargs):
+        print('Create Zoom Meeting', self.id)
+        print('Meeting', kwargs)
+
+        url = "https://api.zoom.us/v2/users/me/meetings"
+        req_headers = {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImlzcyI6IkxrMW9RY2loU0RPcF93NVVHZkpUcUEiLCJleHAiOjE2MTI5OTE2MjMsImlhdCI6MTYxMjM4NjgyNH0.KjYWp0wWCzzXe4ANTyXJW2WQ30fG0_pCUdU9A3CrhiM'
+            }
+        req = requests.post(
+            url,
+            headers=req_headers,
+            data=json.dumps(kwargs)
+        )
+
+        result = req.json()
+        print("result", result)
+        self.zoom_uuid = result['uuid']
+        self.zoom_id = result['id']
+        self.zoom_host_id = result['host_id']
+        self.zoom_join_url = result['join_url']
+        self.zoom_link = result['join_url']
+        print(self.zoom_link)
+        return True
+
+    def update_zoom_meeting(self, date_begin, date_end):
+        print('Update Zoom Meeting', self.id)
+        return 'zoom.com/XYZ'
+
+    def cancel_zoom_meeting(self, date_begin, date_end):
+        print('Cancel Zoom Meeting', self.id)
+        return 'zoom.com/XYZ'
+
+    # EMAIL
     def action_send_event_mail(self):
         self.ensure_one()
         template = self.env.ref('amgenevent.event_mail_template_invitation')
@@ -97,15 +155,21 @@ class EventEvent(models.Model):
             'context': ctx,
         }
 
-    # ZOOM API
-    def create_zoom_meeting(self, date_begin, date_end):
-        print('Create Zoom Meeting', self.id)
-        return 'zoom.com/XYZ'
-
-    def update_zoom_meeting(self, date_begin, date_end):
-        print('Create Zoom Meeting', self.id)
-        return 'zoom.com/XYZ'
-
-    def cancel_zoom_meeting(self, date_begin, date_end):
-        print('Create Zoom Meeting', self.id)
-        return 'zoom.com/XYZ'
+    # UTILITIES
+    def _datetime_localize(self, date):
+        """
+        Convert utc time to local timezone.
+        """
+        user_tz = self.env.user.tz
+        if user_tz:
+            local = pytz.timezone(user_tz)
+            is_var_str = isinstance(date, str)
+            if not is_var_str:
+                date = date.strftime("%Y-%m-%d %H:%M:%S")
+            display_date_result = datetime.strftime(
+                pytz.utc.localize(datetime.strptime(date, DEFAULT_SERVER_DATETIME_FORMAT)).astimezone(local),
+                "%Y-%m-%d %H:%M:%S"
+            )
+            return display_date_result
+        else:
+            raise UserError("Please set user timezone")

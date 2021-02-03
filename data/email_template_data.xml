@@ -9,6 +9,8 @@
             <field name="email_to">${(object.organizer_id.email_formatted or '') | safe}</field>
             <field name="body_html" type="html">
                 <div>
+                    ${object.user_id.company_id.name}
+                    <br />
                     Invitación para el evento ${object.name}
                     <br />
                     Enlace Zoom: ${object.zoom_link or ''}
