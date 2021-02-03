@@ -28,8 +28,9 @@
         'views/config_settings_views.xml',
         'views/partner_views.xml',
         'views/event_views.xml',
+        'views/purchase_views.xml',
         'data/initial_data.xml',
-        'data/email_template_data.xml'
+        'data/email_template_data.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

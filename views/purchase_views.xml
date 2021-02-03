@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+  <data>
+    <record id="purchase_order_form_inherit_amgen" model="ir.ui.view">
+      <field name="name">purchase.order.form.inherit.amgen</field>
+      <field name="model">purchase.order</field>
+      <field name="inherit_id" ref="purchase.purchase_order_form"/>
+      <field name="arch" type="xml">
+      <xpath expr="//notebook" position="inside">
+        <page string="Eventos">
+          <field name="event_ids" widget="many2many">
+            <tree>
+              <field name="name" />
+              <field name="date_begin" />
+              <field name="date_end" />
+              <field name="organizer_id" />
+              <field name="speaker_id" />
+              <field name="stage_id" />
+              <field name="seats_reserved"/>
+              <field name="seats_expected"/>
+            </tree>
+          </field>
+        </page>
+      </xpath>
+      </field>
+    </record>
+  </data>
+</odoo>

@@ -16,6 +16,9 @@
         <field name="date_end" position="attributes">
           <attribute name="attrs">{'readonly': [('stage_id', '!=', 1)]}</attribute>
         </field>
+        <xpath expr="//field[@name='tag_ids']" position="after">
+          <field name="order_id" readonly="1" />
+        </xpath>
         <field name="organizer_id" position="attributes">
           <attribute name="domain">[('category_id.name','=','Organizador')]</attribute>
         </field>

@@ -56,7 +56,7 @@ class EventEvent(models.Model):
                 self.validate_event_date(self.date_begin, self.date_end)
             if current_stage_id == 2:
                 if new_stage_id == 3:
-                    self.create_zoom_meeting()
+                    self.zoom_link = self.create_zoom_meeting(self.date_begin, self.date_end)
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
 
         if 'date_begin' in vals or 'date_end' in vals:
@@ -97,6 +97,14 @@ class EventEvent(models.Model):
         }
 
     # ZOOM API
-    def create_zoom_meeting(self):
+    def create_zoom_meeting(self, date_begin, date_end):
         print('Create Zoom Meeting', self.id)
-        return ''
+        return 'zoom.com/XYZ'
+
+    def update_zoom_meeting(self, date_begin, date_end):
+        print('Create Zoom Meeting', self.id)
+        return 'zoom.com/XYZ'
+
+    def cancel_zoom_meeting(self, date_begin, date_end):
+        print('Create Zoom Meeting', self.id)
+        return 'zoom.com/XYZ'
