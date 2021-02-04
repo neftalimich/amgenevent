@@ -10,7 +10,9 @@
                 <h2 t-field="o.user_id.company_id.name" />
                 <h2 t-field="o.name" />
                 <br />
-                <span f-field="o.zoom_link"></span>
+                Organizador: <span t-field="o.organizer_id.name"></span>
+                <br />
+                Zoom URL: <span t-field="o.zoom_link"></span>
             </t>
         </t>
     </template>

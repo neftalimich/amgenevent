@@ -26,16 +26,12 @@
           <field name="speaker_id" domain="[('category_id.name', '=', 'Ponente')]" />
         </xpath>
         <xpath expr="//field[@name='user_id']" position="after">
-          <field name="moderator_ids" widget="many2many_tags" />
+          <field name="moderator_ids" widget="many2many_tags" domain="[('category_id.name', '=', 'Moderador')]" />
         </xpath>
         <field name="address_id" position="attributes">
           <attribute name="string">Lugar</attribute>
           <attribute name="domain">[('category_id.name', '=', 'Lugar')]</attribute>
         </field>
-        <xpath expr="//field[@name='auto_confirm']" position="after">
-          <field name="zoom_link" />
-          <field name="zoom_pass" />
-        </xpath>
         <xpath expr="//label[@for='seats_limited']" position="attributes">
           <attribute name="string">Limitar lugares</attribute>
         </xpath>
@@ -45,6 +41,17 @@
         <xpath expr="//header" position="inside">
           <button name="action_send_event_mail" string="Enviar Invitación" type="object" class="oe_highlight"
               attrs="{'invisible': [('stage_id', '!=', 3)]}" />
+        </xpath>
+        <xpath expr="//group" position="after">
+          <group string="Zoom" name="zoom_data" >
+            <group>
+              <field name="zoom_link" readonly="1" />
+              <field name="zoom_pass" />
+              <field name="minutes_before" />
+              <field name="minutes_after" />
+              <field name="limit_exceeded" />
+            </group>
+          </group>
         </xpath>
       </field>
     </record>
@@ -70,6 +77,32 @@
         </xpath>
         <xpath expr="//field[@name='date_open']" position="after">
           <field name="pre_state" />
+        </xpath>
+      </field>
+    </record>
+
+    <!-- Kanban view -->
+    <record id="view_event_kanban_inherit_amgen" model="ir.ui.view">
+      <field name="name">event.kanban.inherit</field>
+      <field name="model">event.event</field>
+      <field name="inherit_id" ref="event.view_event_kanban"/>
+      <field name="arch" type="xml">
+        <xpath expr="//kanban" position="inside">
+          <field name="limit_exceeded" />
+        </xpath>
+        <xpath expr="//templates/t[@t-name='kanban-box']/div/div/div" position="replace">
+          <div t-attf-class="col-3 p-2 text-center d-flex flex-column justify-content-center {{record.limit_exceeded.raw_value == true ? 'bg-secondary' : 'bg-primary'}}" >
+              <div t-esc="record.date_begin.raw_value.getDate()" class="o_event_fontsize_20"/>
+              <div>
+                  <t t-esc="moment(record.date_begin.raw_value).format('MMM')"/>
+                  <t t-esc="record.date_begin.raw_value.getFullYear()"/>
+              </div>
+              <div><t t-esc="moment(record.date_begin.raw_value).format('LT')"/></div>
+              <div t-if="moment(record.date_begin.raw_value).dayOfYear() !== moment(record.date_end.raw_value).dayOfYear()">
+                  <i class="fa fa-arrow-right o_event_fontsize_09" title="End date"/>
+                  <t t-esc="moment(record.date_end.raw_value).format('D MMM')"/>
+               </div>
+          </div>
         </xpath>
       </field>
     </record>

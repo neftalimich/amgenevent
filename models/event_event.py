@@ -5,7 +5,7 @@ import pytz
 import json
 import requests
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
@@ -17,13 +17,15 @@ class EventEvent(models.Model):
 
     speaker_id = fields.Many2one(
         'res.partner', string='Ponente',
-        ondelete='set null', domain="[('category_id.name', '=', 'Ponente')]")
+        ondelete='set null'
+    )
 
     moderator_ids = fields.Many2many(
         comodel_name='res.partner',
-        string='Moderador(es)',
-        domain="[('category_id.name', '=', 'Moderador')]"
+        string='Moderador(es)'
     )
+
+    limit_exceeded = fields.Boolean(string='Excedió el límite', default=False)
 
     zoom_id = fields.Char(string='Id Zoom')
     zoom_uuid = fields.Char()
@@ -32,6 +34,9 @@ class EventEvent(models.Model):
 
     zoom_pass = fields.Char(string='Password Zoom')
     zoom_link = fields.Char(string='Enlace Zoom')
+
+    minutes_before = fields.Integer(string='Minutos Antes', default=20)
+    minutes_after = fields.Integer(string='Minutos Después', default=30)
 
     order_id = fields.Many2one(comodel_name='purchase.order', string='Compra')
 
@@ -46,62 +51,110 @@ class EventEvent(models.Model):
         if new_date_end is not None:
             event_date_end = new_date_end
 
-        matches = self.env["event.event"].search([
+        # matches = self.env["event.event"].search([
+        #     ('id', '!=', event_id),
+        #     '&',
+        #     '|',
+        #     '&', ('date_begin', '<=', event_date_begin), ('date_end', '>=', event_date_begin),
+        #     '&', ('date_begin', '<=', event_date_end), ('date_end', '>=', event_date_end),
+        #     '|', ('stage_id', '=', 2), ('stage_id', '=', 3)
+        # ])
+        # if len(matches) > 0:
+        #     raise UserError('El horario ya está reservador por el evento: {}.'.format(matches[0].name))
+
+        event_limit = 4
+
+        events = self.env["event.event"].search([
             ('id', '!=', event_id),
-            '&',
+            ('date_begin', '>=', event_date_begin.date()), ('date_begin', '<=', event_date_end.date()),
             '|',
-            '&', ('date_begin', '<=', event_date_begin), ('date_end', '>=', event_date_begin),
-            '&', ('date_begin', '<=', event_date_end), ('date_end', '>=', event_date_end),
-            '|', ('stage_id', '=', 2), ('stage_id', '=', 3)
+            ('stage_id', '=', 2),
+            '|',
+            ('stage_id', '=', 3),
+            ('stage_id', '=', 4)
         ])
-        if len(matches) > 0:
-            raise UserError('El horario ya está reservador por el evento: {}.'.format(matches[0].name))
+
+        print('Num Events:', len(events))
+
+        if len(events) >= event_limit:
+            self.limit_exceeded = True
+        else:
+            self.limit_exceeded = False
 
         return True
 
+    def cancel_event_exceed(self):
+        event_id = self.id
+        event_date_begin = self.date_begin
+        event_date_end = self.date_end
+
+        events = self.env["event.event"].search([
+            ('id', '!=', event_id),
+            ('date_begin', '>=', event_date_begin.date()), ('date_begin', '<=', event_date_begin.date()),
+            '|',
+            ('stage_id', '=', 2),
+            '|',
+            ('stage_id', '=', 3),
+            ('stage_id', '=', 4)
+        ], order='id ASC')
+
+        event_limit = 4
+
+        events[0:event_limit].write({'limit_exceeded': False})
+        events[event_limit:].write({'limit_exceeded': True})
+
+        return True
+
+    # Write
     def write(self, vals):
         if 'stage_id' in vals:
             current_stage_id = self.stage_id.id
             new_stage_id = vals['stage_id']
-            if current_stage_id == 1:
+
+            if current_stage_id == 1 or current_stage_id == 5:
                 if new_stage_id != 2:
                     raise UserError('Primero debes Reservar el evento')
-                self.validate_event_date(self.date_begin, self.date_end)
-            if current_stage_id == 2:
-                if new_stage_id == 3:
-                    kwargs = {
-                        "topic": self.name,
-                        "type": 2,
-                        "password": self.zoom_pass or "",
-                        "start_time": self._datetime_localize(self.date_begin),
-                        "duration": int((self.date_end - self.date_begin).total_seconds() / 60),
-                        "timezone": self.env.user.tz,
-                        "agenda": ""
-                    }
 
-                    self.create_zoom_meeting(kwargs)
+            if new_stage_id == 1:
+                self.limit_exceeded = False
+            elif new_stage_id == 2:
+                self.validate_event_date(self.date_begin, self.date_end)
+            elif new_stage_id == 3:
+                if not self.zoom_link:
+                    print('Create Zoom meeting')
+                    # self.create_zoom_meeting()
+            elif new_stage_id == 4:
+                print('Event Ended')
+            elif new_stage_id == 5:
+                print('Cancel Event')
+                self.limit_exceeded = False
+                self.cancel_event_exceed()
+                if self.zoom_link:
+                    print('Cancel Meeting')
+                    # self.cancel_zoom_meeting()
 
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
-
-        if 'date_begin' in vals or 'date_end' in vals:
-            event_date_begin = self.date_begin
-            event_date_end = self.date_end
-            event_zoom_link = self.zoom_link
-            if 'date_begin' in vals:
-                event_date_begin = vals['date_begin']
-            if 'date_end' in vals:
-                event_date_end = vals['date_end']
-            if current_stage_id == 3:
-                self.validate_event_date(event_date_begin, event_date_end)
-                # self.change_date_zoom_conference(event_zoom_link, event_date_begin, event_date_end)
 
         return super(EventEvent, self).write(vals)
 
     # ZOOM API
-    def create_zoom_meeting(self, kwargs):
+    def create_zoom_meeting(self):
         print('Create Zoom Meeting', self.id)
-        print('Meeting', kwargs)
+        date_begin = self.date_begin - timedelta(minutes=self.minutes_before)
+        date_end = self.date_begin + timedelta(minutes=self.minutes_after)
+        duration = int((date_end - date_begin).total_seconds() / 60)
 
+        kwargs = {
+            "topic": self.name,
+            "type": 2,
+            "password": self.zoom_pass or "",
+            "start_time": self._datetime_localize(date_begin),
+            "duration": duration,
+            "timezone": self.env.user.tz,
+            "agenda": ""
+        }
+
+        print('Meeting', kwargs)
         url = "https://api.zoom.us/v2/users/me/meetings"
         req_headers = {
                 'Content-Type': 'application/json',
