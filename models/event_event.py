@@ -32,6 +32,7 @@ class EventEvent(models.Model):
     zoom_host_id = fields.Char()
     zoom_join_url = fields.Char()
 
+    zoom_topic = fields.Char(string='Tema Zoom')
     zoom_pass = fields.Char(string='Password Zoom')
     zoom_link = fields.Char(string='Enlace Zoom')
 
@@ -129,11 +130,23 @@ class EventEvent(models.Model):
                 print('Cancel Event')
                 self.limit_exceeded = False
                 self.cancel_event_exceed()
-                if self.zoom_link:
+                if self.zoom_id:
                     print('Cancel Meeting')
-                    # self.cancel_zoom_meeting()
+                    self.cancel_zoom_meeting()
 
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
+
+        if 'date_begin' in vals or 'date_end' in vals:
+            date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
+            date_end = vals['date_begin'] if 'date_begin' in vals else self.date_begin
+            self.cancel_event_exceed()
+            self.validate_event_date(date_begin, date_end)
+
+        if 'name' in vals or 'zoom_topic' in vals or 'zoom_pass' in vals \
+                or 'date_begin' in vals or 'date_end' in vals or 'minutes_before' in vals or 'minutes_after' in vals:
+            if self.zoom_link:
+                print('Update Zoom Meeting')
+                self.update_zoom_meeting(vals)
 
         return super(EventEvent, self).write(vals)
 
@@ -141,20 +154,19 @@ class EventEvent(models.Model):
     def create_zoom_meeting(self):
         print('Create Zoom Meeting', self.id)
         date_begin = self.date_begin - timedelta(minutes=self.minutes_before)
-        date_end = self.date_begin + timedelta(minutes=self.minutes_after)
+        date_end = self.date_end + timedelta(minutes=self.minutes_after)
         duration = int((date_end - date_begin).total_seconds() / 60)
 
         kwargs = {
-            "topic": self.name,
+            "topic": self.zoom_topic or self.name or "",
             "type": 2,
             "password": self.zoom_pass or "",
             "start_time": self._datetime_localize(date_begin),
             "duration": duration,
-            "timezone": self.env.user.tz,
-            "agenda": ""
+            "timezone": self.env.user.tz
         }
-
         print('Meeting', kwargs)
+
         url = "https://api.zoom.us/v2/users/me/meetings"
         req_headers = {
                 'Content-Type': 'application/json',
@@ -174,15 +186,47 @@ class EventEvent(models.Model):
         self.zoom_join_url = result['join_url']
         self.zoom_link = result['join_url']
         print(self.zoom_link)
+
         return True
 
-    def update_zoom_meeting(self, date_begin, date_end):
+    def update_zoom_meeting(self, vals):
         print('Update Zoom Meeting', self.id)
-        return 'zoom.com/XYZ'
+        if vals is not None:
+            name = vals['name'] if 'name' in vals else self.name
+            zoom_topic = vals['zoom_topic'] if 'zoom_topic' in vals else self.zoom_topic
+            zoom_pass = vals['zoom_pass'] if 'zoom_pass' in vals else self.zoom_pass
+            date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
+            date_end = vals['date_begin'] if 'date_begin' in vals else self.date_begin
+            minutes_before = vals['minutes_before'] if 'minutes_before' in vals else self.minutes_before
+            minutes_after = vals['minutes_after'] if 'minutes_after' in vals else self.minutes_after
+        else:
+            name = self.name
+            zoom_topic = self.zoom_topic
+            zoom_pass = self.zoom_pass
+            date_begin = self.date_begin
+            date_end = self.date_begin
+            minutes_before = self.minutes_before
+            minutes_after = self.minutes_after
 
-    def cancel_zoom_meeting(self, date_begin, date_end):
-        print('Cancel Zoom Meeting', self.id)
-        return 'zoom.com/XYZ'
+        date_begin = date_begin - timedelta(minutes=minutes_before)
+        date_end = date_end + timedelta(minutes=minutes_after)
+        duration = int((date_end - date_begin).total_seconds() / 60)
+
+        kwargs = {
+            "topic": zoom_topic or name or "",
+            "type": 2,
+            "password": zoom_pass or "",
+            "start_time": self._datetime_localize(date_begin),
+            "duration": duration,
+            "timezone": self.env.user.tz
+        }
+        print('Meeting', kwargs)
+        return True
+
+    def cancel_zoom_meeting(self):
+        print('Cancel Zoom Meeting', self.id, self.zoom_id)
+        # self.zoom_id = None
+        return True
 
     # EMAIL
     def action_send_event_mail(self):

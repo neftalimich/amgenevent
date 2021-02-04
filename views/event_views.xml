@@ -49,7 +49,7 @@
               <field name="zoom_pass" />
               <field name="minutes_before" />
               <field name="minutes_after" />
-              <field name="limit_exceeded" />
+              <field name="limit_exceeded" readonly="1" />
             </group>
           </group>
         </xpath>
