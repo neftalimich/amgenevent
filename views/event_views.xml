@@ -45,12 +45,18 @@
         <xpath expr="//group" position="after">
           <group string="Zoom" name="zoom_data" >
             <group>
-              <field name="zoom_link" readonly="1" />
+              <field name="zoom_topic" />
               <field name="zoom_pass" />
+            </group>
+            <group>
               <field name="minutes_before" />
               <field name="minutes_after" />
               <field name="limit_exceeded" readonly="1" />
             </group>
+          </group>
+          <group>
+            <field name="zoom_link" readonly="1" />
+            <field name="description" />
           </group>
         </xpath>
       </field>
