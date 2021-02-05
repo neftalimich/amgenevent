@@ -27,6 +27,7 @@
         # 'security/ir.model.access.csv',
         'views/config_settings_views.xml',
         'views/partner_views.xml',
+        'views/event_templates.xml',
         'views/event_views.xml',
         'views/purchase_views.xml',
         'report/event_event_templates.xml',
