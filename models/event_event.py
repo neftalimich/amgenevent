@@ -14,6 +14,7 @@ from odoo.tools import DEFAULT_SERVER_DATETIME_FORMAT
 
 class EventEvent(models.Model):
     _inherit = 'event.event'
+    token = 'Bearer Token'
 
     speaker_id = fields.Many2one(
         'res.partner', string='Ponente',
@@ -114,7 +115,7 @@ class EventEvent(models.Model):
 
             if current_stage_id == 1 or current_stage_id == 5:
                 if new_stage_id != 2:
-                    raise UserError('Primero debes Reservar el evento')
+                    raise UserError('Primero debes Reservar el evento.')
 
             if new_stage_id == 1:
                 self.limit_exceeded = False
@@ -132,7 +133,7 @@ class EventEvent(models.Model):
                 self.cancel_event_exceed()
                 if self.zoom_id:
                     print('Cancel Meeting')
-                    self.cancel_zoom_meeting()
+                    # self.cancel_zoom_meeting()
 
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
 
@@ -146,7 +147,7 @@ class EventEvent(models.Model):
                 or 'date_begin' in vals or 'date_end' in vals or 'minutes_before' in vals or 'minutes_after' in vals:
             if self.zoom_link:
                 print('Update Zoom Meeting')
-                self.update_zoom_meeting(vals)
+                # self.update_zoom_meeting(vals)
 
         return super(EventEvent, self).write(vals)
 
@@ -167,25 +168,35 @@ class EventEvent(models.Model):
         }
         print('Meeting', kwargs)
 
+        # Zoom Patch Request
         url = "https://api.zoom.us/v2/users/me/meetings"
         req_headers = {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImlzcyI6IkxrMW9RY2loU0RPcF93NVVHZkpUcUEiLCJleHAiOjE2MTI5OTE2MjMsImlhdCI6MTYxMjM4NjgyNH0.KjYWp0wWCzzXe4ANTyXJW2WQ30fG0_pCUdU9A3CrhiM'
-            }
+            'Content-Type': 'application/json',
+            'Authorization': self.token
+        }
         req = requests.post(
             url,
             headers=req_headers,
             data=json.dumps(kwargs)
         )
 
-        result = req.json()
-        print("result", result)
-        self.zoom_uuid = result['uuid']
-        self.zoom_id = result['id']
-        self.zoom_host_id = result['host_id']
-        self.zoom_join_url = result['join_url']
-        self.zoom_link = result['join_url']
-        print(self.zoom_link)
+        try:
+            req = requests.patch(url, headers=req_headers, data=json.dumps(kwargs))
+            print('Zoom Request - Status Code', req.status_code)
+            if req.status_code != 200:
+                print("Error - Zoom - Create Meeting")
+                print(req)
+            else:
+                result = req.json()
+                self.zoom_uuid = result['uuid']
+                self.zoom_id = result['id']
+                self.zoom_host_id = result['host_id']
+                self.zoom_join_url = result['join_url']
+                self.zoom_link = result['join_url']
+                print("Success - Zoom - Creating Meeting", result)
+        except requests.exceptions.RequestException as e:
+            print("Error - Zoom - Request - Create Meeting")
+            print(e)
 
         return True
 
@@ -221,11 +232,49 @@ class EventEvent(models.Model):
             "timezone": self.env.user.tz
         }
         print('Meeting', kwargs)
+
+        # Zoom patch request
+        url = "https://api.zoom.us/v2/meetings" + self.zoom_id
+        req_headers = {
+            'Content-Type': 'application/json',
+            'Authorization': self.token
+        }
+        try:
+            req = requests.patch(url, headers=req_headers, data=json.dumps(kwargs))
+            print(req.status_code)
+            if req.status_code != 200:
+                print("Error - Zoom - Update Meeting")
+                print(req)
+            else:
+                print("Success - Zoom - Update Meeting")
+                print(req)
+        except requests.exceptions.RequestException as e:
+            print("Error - Zoom - Request - Update Meeting")
+            print(e)
+
         return True
 
     def cancel_zoom_meeting(self):
-        print('Cancel Zoom Meeting', self.id, self.zoom_id)
-        # self.zoom_id = None
+        print('Cancel Zoom Meeting', self.id)
+        # Zoom delete request
+        url = "https://api.zoom.us/v2/meetings" + self.zoom_id
+        req_headers = {
+            'Authorization': self.token
+        }
+
+        try:
+            req = requests.delete(url, headers=req_headers)
+            if req.status_code != 204:
+                print("Error - Zoom - Cancel Meeting")
+            else:
+                print("Success - Zoom - Cancel Meeting", self.id, self.zoom_id)
+                self.zoom_id = None
+                self.zoom_link = None
+                self.zoom_join_url = None
+        except requests.exceptions.RequestException as e:
+            print("Error - Zoom - Request - Cancel Meeting")
+            print(e)
+
         return True
 
     # EMAIL
