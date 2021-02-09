@@ -11,11 +11,14 @@
           <attribute name="clickable">1</attribute>
         </field>
         <field name="date_begin" position="attributes">
-          <attribute name="attrs">{'readonly': [('stage_id', '!=', 1)]}</attribute>
+          <attribute name="attrs">{'readonly': ['|',('stage_id', '==', 4),('stage_id', '==', 5)]}</attribute>
         </field>
         <field name="date_end" position="attributes">
-          <attribute name="attrs">{'readonly': [('stage_id', '!=', 1)]}</attribute>
+          <attribute name="attrs">{'readonly': ['|',('stage_id', '==', 4),('stage_id', '==', 5)]}</attribute>
         </field>
+        <xpath expr="//field[@name='date_tz']" position="before">
+          <field name="duration" attrs="{'readonly' : ['|',('stage_id', '==', 4),('stage_id', '==', 5)]}" />
+        </xpath>
         <xpath expr="//field[@name='tag_ids']" position="after">
           <field name="order_id" readonly="1" />
         </xpath>

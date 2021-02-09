@@ -42,16 +42,27 @@ class EventEvent(models.Model):
 
     order_id = fields.Many2one(comodel_name='purchase.order', string='Compra')
 
+    duration = fields.Integer(string='Duración(min)', help='Duración en minutos.')
+
+    # On Change
+    @api.onchange('duration')
+    def _onchange_duration(self):
+        if self.date_begin:
+            self.date_end = self.date_begin + timedelta(minutes=self.duration)
+
+    @api.onchange('date_end')
+    def _onchange_date_end(self):
+        if self.date_begin:
+            self.duration = int((self.date_end - self.date_begin).total_seconds() / 60)
+
     # Validation
     def validate_event_date(self, new_date_begin, new_date_end):
         event_id = self.id
-        event_date_begin = self.date_begin
-        event_date_end = self.date_end
+        event_date_begin = new_date_begin if new_date_begin is not None else self.date_begin
+        event_date_end = new_date_end if new_date_end is not None else self.date_end
 
-        if new_date_begin is not None:
-            event_date_begin = new_date_begin
-        if new_date_end is not None:
-            event_date_end = new_date_end
+        if event_date_begin is not None and event_date_end is not None:
+            return True
 
         # matches = self.env["event.event"].search([
         #     ('id', '!=', event_id),
@@ -85,30 +96,36 @@ class EventEvent(models.Model):
 
         return True
 
-    def cancel_event_exceed(self):
+    def cancel_event_exceed(self, date):
         event_id = self.id
-        event_date_begin = self.date_begin
-        event_date_end = self.date_end
+        event_date = date if date is not None else self.date_begin
 
-        events = self.env["event.event"].search([
-            ('id', '!=', event_id),
-            ('date_begin', '>=', event_date_begin.date()), ('date_begin', '<=', event_date_begin.date()),
-            '|',
-            ('stage_id', '=', 2),
-            '|',
-            ('stage_id', '=', 3),
-            ('stage_id', '=', 4)
-        ], order='id ASC')
+        if event_date:
+            events = self.env["event.event"].search([
+                ('id', '!=', event_id),
+                ('date_begin', '>=', event_date.date()), ('date_begin', '<=', event_date.date()),
+                '|',
+                ('stage_id', '=', 2),
+                '|',
+                ('stage_id', '=', 3),
+                ('stage_id', '=', 4)
+            ], order='id ASC')
 
-        event_limit = 4
+            event_limit = 4
 
-        events[0:event_limit].write({'limit_exceeded': False})
-        events[event_limit:].write({'limit_exceeded': True})
+            events[0:event_limit].write({'limit_exceeded': False})
+            events[event_limit:].write({'limit_exceeded': True})
 
         return True
 
     # Write
     def write(self, vals):
+        if 'limit_exceeded' in vals:
+            return super(EventEvent, self).write(vals)
+
+        date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
+        date_end = vals['date_end'] if 'date_end' in vals else self.date_end
+
         if 'stage_id' in vals:
             current_stage_id = self.stage_id.id
             new_stage_id = vals['stage_id']
@@ -120,7 +137,7 @@ class EventEvent(models.Model):
             if new_stage_id == 1:
                 self.limit_exceeded = False
             elif new_stage_id == 2:
-                self.validate_event_date(self.date_begin, self.date_end)
+                self.validate_event_date(date_begin, date_end)
             elif new_stage_id == 3:
                 if not self.zoom_link:
                     print('Create Zoom meeting')
@@ -138,9 +155,7 @@ class EventEvent(models.Model):
             print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
 
         if 'date_begin' in vals or 'date_end' in vals:
-            date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
-            date_end = vals['date_begin'] if 'date_begin' in vals else self.date_begin
-            self.cancel_event_exceed()
+            self.cancel_event_exceed(date_begin)
             self.validate_event_date(date_begin, date_end)
 
         if 'name' in vals or 'zoom_topic' in vals or 'zoom_pass' in vals \
