@@ -6,15 +6,22 @@ import json
 import requests
 
 from datetime import datetime, time, timedelta
+from pytz import timezone
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError, ValidationError
 from odoo.tools import DEFAULT_SERVER_DATETIME_FORMAT
 
 
+def _datetime_timezone(date, date_tz):
+    return datetime.strftime(date.astimezone(timezone(date_tz)), "%Y-%m-%d %H:%M:%S")
+
+
 class EventEvent(models.Model):
     _inherit = 'event.event'
-    token = 'Bearer Token'
+    token = 'Bearer '
+
+    description = fields.Html(default='')
 
     speaker_id = fields.Many2one(
         'res.partner', string='Ponente',
@@ -61,19 +68,8 @@ class EventEvent(models.Model):
         event_date_begin = new_date_begin if new_date_begin is not None else self.date_begin
         event_date_end = new_date_end if new_date_end is not None else self.date_end
 
-        if event_date_begin is not None and event_date_end is not None:
-            return True
-
-        # matches = self.env["event.event"].search([
-        #     ('id', '!=', event_id),
-        #     '&',
-        #     '|',
-        #     '&', ('date_begin', '<=', event_date_begin), ('date_end', '>=', event_date_begin),
-        #     '&', ('date_begin', '<=', event_date_end), ('date_end', '>=', event_date_end),
-        #     '|', ('stage_id', '=', 2), ('stage_id', '=', 3)
-        # ])
-        # if len(matches) > 0:
-        #     raise UserError('El horario ya está reservador por el evento: {}.'.format(matches[0].name))
+        if not event_date_begin or not event_date_end:
+            return False
 
         event_limit = 4
 
@@ -87,18 +83,19 @@ class EventEvent(models.Model):
             ('stage_id', '=', 4)
         ])
 
-        print('Num Events:', len(events))
+        print('Event - Num Events this day:', len(events))
 
         if len(events) >= event_limit:
-            self.limit_exceeded = True
+            return True
         else:
-            self.limit_exceeded = False
-
-        return True
+            return False
 
     def cancel_event_exceed(self, date):
         event_id = self.id
         event_date = date if date is not None else self.date_begin
+
+        if not event_date:
+            return False
 
         if event_date:
             events = self.env["event.event"].search([
@@ -118,13 +115,67 @@ class EventEvent(models.Model):
 
         return True
 
+    # Create
+    @api.model
+    def create(self, vals):
+        print("Event - Create", json.dumps(vals))
+        date_tz = vals['date_tz'] if 'date_tz' in vals else self.env.user.tz
+        date_begin = datetime.strptime(vals['date_begin'], "%Y-%m-%d %H:%M:%S")
+        date_end = datetime.strptime(vals['date_end'], "%Y-%m-%d %H:%M:%S")
+        minutes_before = vals['minutes_before'] if 'minutes_before' in vals else 0
+        minutes_after = vals['minutes_after'] if 'minutes_before' in vals else 0
+
+        zoom_date_begin = date_begin - timedelta(minutes=minutes_before)
+        zoom_date_end = date_end + timedelta(minutes=minutes_after)
+        zoom_duration = int((zoom_date_end - zoom_date_begin).total_seconds() / 60)
+
+        vals['limit_exceeded'] = self.validate_event_date(date_begin, date_end)
+
+        if not vals['limit_exceeded']:
+            vals['stage_id'] = 2
+            kwargs = {
+                "topic": vals['zoom_topic'] or vals['name'] or "",
+                "type": 2,
+                "password": vals['zoom_pass'] or "",
+                "start_time": _datetime_timezone(zoom_date_begin, date_tz),
+                "duration": zoom_duration,
+                "timezone": date_tz
+            }
+            print(kwargs)
+            result = self.create_zoom_meeting(kwargs)
+            if result:
+                vals['zoom_uuid'] = result['uuid']
+                vals['zoom_id'] = result['id']
+                vals['zoom_host_id'] = result['host_id']
+                vals['zoom_join_url'] = result['join_url']
+                vals['zoom_link'] = result['join_url']
+                vals['stage_id'] = 3
+        else:
+            print("Send Email to User")
+
+        return super(EventEvent, self).create(vals)
+
     # Write
     def write(self, vals):
+        print('event.id', self.id)
+
         if 'limit_exceeded' in vals:
             return super(EventEvent, self).write(vals)
 
-        date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
-        date_end = vals['date_end'] if 'date_end' in vals else self.date_end
+        date_tz = vals['date_tz'] if 'date_tz' in vals else self.env.user.tz
+        date_begin = \
+            datetime.strptime(vals['date_begin'], "%Y-%m-%d %H:%M:%S") if 'date_begin' in vals else self.date_begin
+        date_end = \
+            datetime.strptime(vals['date_end'], "%Y-%m-%d %H:%M:%S") if 'date_end' in vals else self.date_end
+        duration = int((date_end - date_begin).total_seconds() / 60)
+        minutes_before = vals['minutes_before'] if 'minutes_before' in vals else self.minutes_before
+        minutes_after = vals['minutes_after'] if 'minutes_before' in vals else self.minutes_after
+
+        zoom_topic = vals['zoom_topic'] if 'zoom_topic' in vals else (self.zoom_topic if self.zoom_topic else self.name)
+        zoom_pass = vals['zoom_pass'] if 'zoom_pass' in vals else self.zoom_pass
+        zoom_date_begin = date_begin - timedelta(minutes=minutes_before)
+        zoom_date_end = date_end + timedelta(minutes=minutes_after)
+        zoom_duration = int((zoom_date_end - zoom_date_begin).total_seconds() / 60)
 
         if 'stage_id' in vals:
             current_stage_id = self.stage_id.id
@@ -135,53 +186,66 @@ class EventEvent(models.Model):
                     raise UserError('Primero debes Reservar el evento.')
 
             if new_stage_id == 1:
-                self.limit_exceeded = False
+                vals['limit_exceeded'] = False
             elif new_stage_id == 2:
-                self.validate_event_date(date_begin, date_end)
+                vals['limit_exceeded'] = self.validate_event_date(date_begin, date_end)
             elif new_stage_id == 3:
-                if not self.zoom_link:
-                    print('Create Zoom meeting')
-                    # self.create_zoom_meeting()
+                if not self.zoom_id:
+                    kwargs = {
+                        "topic": zoom_topic or "",
+                        "type": 2,
+                        "password": zoom_pass or "",
+                        "start_time": _datetime_timezone(zoom_date_begin, date_tz),
+                        "duration": zoom_duration,
+                        "timezone": date_tz
+                    }
+                    result = self.create_zoom_meeting(kwargs)
+                    if result:
+                        vals['zoom_uuid'] = result['uuid']
+                        vals['zoom_id'] = result['id']
+                        vals['zoom_host_id'] = result['host_id']
+                        vals['zoom_join_url'] = result['join_url']
+                        vals['zoom_link'] = result['join_url']
             elif new_stage_id == 4:
                 print('Event Ended')
             elif new_stage_id == 5:
                 print('Cancel Event')
-                self.limit_exceeded = False
-                self.cancel_event_exceed()
+                vals['limit_exceeded'] = False
+                self.cancel_event_exceed(date_begin)
                 if self.zoom_id:
-                    print('Cancel Meeting')
-                    # self.cancel_zoom_meeting()
-
-            print('Stage Modified from {} to {}'.format(current_stage_id, new_stage_id))
-
-        if 'date_begin' in vals or 'date_end' in vals:
-            self.cancel_event_exceed(date_begin)
-            self.validate_event_date(date_begin, date_end)
-
-        if 'name' in vals or 'zoom_topic' in vals or 'zoom_pass' in vals \
-                or 'date_begin' in vals or 'date_end' in vals or 'minutes_before' in vals or 'minutes_after' in vals:
-            if self.zoom_link:
-                print('Update Zoom Meeting')
-                # self.update_zoom_meeting(vals)
+                    result = self.cancel_zoom_meeting(self.zoom_id)
+                    if result:
+                        vals['zoom_uuid'] = None
+                        vals['zoom_id'] = None
+                        vals['zoom_host_id'] = None
+                        vals['zoom_join_url'] = None
+                        vals['zoom_link'] = None
+        else:
+            if ('date_begin' in vals or 'date_end') in vals:
+                self.cancel_event_exceed(date_begin)
+                self.validate_event_date(date_begin, date_end)
+            if 'name' in vals or 'zoom_topic' in vals or 'zoom_pass' in vals \
+                    or 'date_begin' in vals or 'date_end' in vals \
+                    or 'minutes_before' in vals or 'minutes_after' in vals:
+                if self.zoom_id:
+                    kwargs = {
+                        "topic": zoom_topic or "",
+                        "type": 2,
+                        "password": zoom_pass or "",
+                        "start_time": _datetime_timezone(zoom_date_begin, date_tz),
+                        "duration": zoom_duration,
+                        "timezone": date_tz
+                    }
+                    self.update_zoom_meeting(kwargs)
 
         return super(EventEvent, self).write(vals)
 
     # ZOOM API
-    def create_zoom_meeting(self):
-        print('Create Zoom Meeting', self.id)
-        date_begin = self.date_begin - timedelta(minutes=self.minutes_before)
-        date_end = self.date_end + timedelta(minutes=self.minutes_after)
-        duration = int((date_end - date_begin).total_seconds() / 60)
+    def create_zoom_meeting(self, kwargs):
+        print("Create Zoom Meeting", self.id, kwargs)
 
-        kwargs = {
-            "topic": self.zoom_topic or self.name or "",
-            "type": 2,
-            "password": self.zoom_pass or "",
-            "start_time": self._datetime_localize(date_begin),
-            "duration": duration,
-            "timezone": self.env.user.tz
-        }
-        print('Meeting', kwargs)
+        # Test
+        # return {'id': 1234, 'uuid': 'UUID Test', 'host_id': 'Host Id Test', 'join_url': 'URL Test'}
 
         # Zoom Patch Request
         url = "https://api.zoom.us/v2/users/me/meetings"
@@ -189,64 +253,29 @@ class EventEvent(models.Model):
             'Content-Type': 'application/json',
             'Authorization': self.token
         }
-        req = requests.post(
-            url,
-            headers=req_headers,
-            data=json.dumps(kwargs)
-        )
 
         try:
-            req = requests.patch(url, headers=req_headers, data=json.dumps(kwargs))
+            req = requests.post(
+                url,
+                headers=req_headers,
+                data=json.dumps(kwargs)
+            )
             print('Zoom Request - Status Code', req.status_code)
-            if req.status_code != 200:
+            if req.status_code != 201:
                 print("Error - Zoom - Create Meeting")
                 print(req)
+                return False
             else:
                 result = req.json()
-                self.zoom_uuid = result['uuid']
-                self.zoom_id = result['id']
-                self.zoom_host_id = result['host_id']
-                self.zoom_join_url = result['join_url']
-                self.zoom_link = result['join_url']
                 print("Success - Zoom - Creating Meeting", result)
+                return result
         except requests.exceptions.RequestException as e:
             print("Error - Zoom - Request - Create Meeting")
             print(e)
+            return False
 
-        return True
-
-    def update_zoom_meeting(self, vals):
-        print('Update Zoom Meeting', self.id)
-        if vals is not None:
-            name = vals['name'] if 'name' in vals else self.name
-            zoom_topic = vals['zoom_topic'] if 'zoom_topic' in vals else self.zoom_topic
-            zoom_pass = vals['zoom_pass'] if 'zoom_pass' in vals else self.zoom_pass
-            date_begin = vals['date_begin'] if 'date_begin' in vals else self.date_begin
-            date_end = vals['date_begin'] if 'date_begin' in vals else self.date_begin
-            minutes_before = vals['minutes_before'] if 'minutes_before' in vals else self.minutes_before
-            minutes_after = vals['minutes_after'] if 'minutes_after' in vals else self.minutes_after
-        else:
-            name = self.name
-            zoom_topic = self.zoom_topic
-            zoom_pass = self.zoom_pass
-            date_begin = self.date_begin
-            date_end = self.date_begin
-            minutes_before = self.minutes_before
-            minutes_after = self.minutes_after
-
-        date_begin = date_begin - timedelta(minutes=minutes_before)
-        date_end = date_end + timedelta(minutes=minutes_after)
-        duration = int((date_end - date_begin).total_seconds() / 60)
-
-        kwargs = {
-            "topic": zoom_topic or name or "",
-            "type": 2,
-            "password": zoom_pass or "",
-            "start_time": self._datetime_localize(date_begin),
-            "duration": duration,
-            "timezone": self.env.user.tz
-        }
-        print('Meeting', kwargs)
+    def update_zoom_meeting(self, kwargs):
+        print('Update Zoom Meeting', self.id, kwargs)
 
         # Zoom patch request
         url = "https://api.zoom.us/v2/meetings" + self.zoom_id
@@ -269,10 +298,10 @@ class EventEvent(models.Model):
 
         return True
 
-    def cancel_zoom_meeting(self):
-        print('Cancel Zoom Meeting', self.id)
+    def cancel_zoom_meeting(self, zoom_id):
+        print('Cancel Zoom Meeting', self.id, zoom_id)
         # Zoom delete request
-        url = "https://api.zoom.us/v2/meetings" + self.zoom_id
+        url = "https://api.zoom.us/v2/meetings/" + zoom_id
         req_headers = {
             'Authorization': self.token
         }
@@ -281,16 +310,14 @@ class EventEvent(models.Model):
             req = requests.delete(url, headers=req_headers)
             if req.status_code != 204:
                 print("Error - Zoom - Cancel Meeting")
+                return False
             else:
-                print("Success - Zoom - Cancel Meeting", self.id, self.zoom_id)
-                self.zoom_id = None
-                self.zoom_link = None
-                self.zoom_join_url = None
+                print("Success - Zoom - Cancel Meeting", self.id, zoom_id)
+                return True
         except requests.exceptions.RequestException as e:
             print("Error - Zoom - Request - Cancel Meeting")
             print(e)
-
-        return True
+            return False
 
     # EMAIL
     def action_send_event_mail(self):

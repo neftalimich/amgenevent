@@ -48,6 +48,7 @@
         <xpath expr="//group" position="after">
           <group string="Zoom" name="zoom_data" >
             <group>
+              <field name="zoom_id" />
               <field name="zoom_topic" />
               <field name="zoom_pass" />
             </group>
