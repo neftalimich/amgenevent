@@ -12,6 +12,10 @@
                 <br />
                 Organizador: <span t-field="o.organizer_id.name"></span>
                 <br />
+                Fecha: <span t-field="o.with_context(tz=o.date_tz).date_begin"></span>
+                <br />
+                Duración: <span t-field="o.duration"></span> Minutos
+                <br />
                 Zoom URL: <span t-field="o.zoom_link"></span>
             </t>
         </t>

@@ -19,7 +19,7 @@ def _datetime_timezone(date, date_tz):
 
 class EventEvent(models.Model):
     _inherit = 'event.event'
-    token = 'Bearer '
+    token = 'Bearer'
 
     description = fields.Html(default='')
 
@@ -157,7 +157,7 @@ class EventEvent(models.Model):
 
     # Write
     def write(self, vals):
-        print('event.id', self.id)
+        print('Write', self.id, json.dumps(vals))
 
         if 'limit_exceeded' in vals:
             return super(EventEvent, self).write(vals)
@@ -177,6 +177,15 @@ class EventEvent(models.Model):
         zoom_date_end = date_end + timedelta(minutes=minutes_after)
         zoom_duration = int((zoom_date_end - zoom_date_begin).total_seconds() / 60)
 
+        kwargs = {
+            "topic": zoom_topic or "",
+            "type": 2,
+            "password": zoom_pass or "",
+            "start_time": _datetime_timezone(zoom_date_begin, date_tz),
+            "duration": zoom_duration,
+            "timezone": date_tz
+        }
+
         if 'stage_id' in vals:
             current_stage_id = self.stage_id.id
             new_stage_id = vals['stage_id']
@@ -191,14 +200,6 @@ class EventEvent(models.Model):
                 vals['limit_exceeded'] = self.validate_event_date(date_begin, date_end)
             elif new_stage_id == 3:
                 if not self.zoom_id:
-                    kwargs = {
-                        "topic": zoom_topic or "",
-                        "type": 2,
-                        "password": zoom_pass or "",
-                        "start_time": _datetime_timezone(zoom_date_begin, date_tz),
-                        "duration": zoom_duration,
-                        "timezone": date_tz
-                    }
                     result = self.create_zoom_meeting(kwargs)
                     if result:
                         vals['zoom_uuid'] = result['uuid']
@@ -228,14 +229,6 @@ class EventEvent(models.Model):
                     or 'date_begin' in vals or 'date_end' in vals \
                     or 'minutes_before' in vals or 'minutes_after' in vals:
                 if self.zoom_id:
-                    kwargs = {
-                        "topic": zoom_topic or "",
-                        "type": 2,
-                        "password": zoom_pass or "",
-                        "start_time": _datetime_timezone(zoom_date_begin, date_tz),
-                        "duration": zoom_duration,
-                        "timezone": date_tz
-                    }
                     self.update_zoom_meeting(kwargs)
 
         return super(EventEvent, self).write(vals)
@@ -342,6 +335,10 @@ class EventEvent(models.Model):
             'target': 'new',
             'context': ctx,
         }
+
+    # COMPUTE
+    def _compute_date_begin_tz(self):
+        return _datetime_timezone(self.date_begin, self.date_tz)
 
     # UTILITIES
     def _datetime_localize(self, date):
