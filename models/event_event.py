@@ -49,7 +49,7 @@ class EventEvent(models.Model):
 
     order_id = fields.Many2one(comodel_name='purchase.order', string='Compra')
 
-    duration = fields.Integer(string='Duración(min)', help='Duración en minutos.')
+    duration = fields.Integer(string='Duración(min)', default=0, help='Duración en minutos.')
 
     # On Change
     @api.onchange('duration')
@@ -119,12 +119,17 @@ class EventEvent(models.Model):
     @api.model
     def create(self, vals):
         print("Event - Create", json.dumps(vals))
+
         date_tz = vals['date_tz'] if 'date_tz' in vals else self.env.user.tz
         date_begin = datetime.strptime(vals['date_begin'], "%Y-%m-%d %H:%M:%S")
+        duration = vals['duration'] if 'duration' in vals else 0
+        if 'date_end' not in vals:
+            vals['date_end'] = datetime.strftime(date_begin + timedelta(minutes=duration), "%Y-%m-%d %H:%M:%S")
         date_end = datetime.strptime(vals['date_end'], "%Y-%m-%d %H:%M:%S")
+        if duration == 0:
+            vals['duration'] = int((date_end - date_begin).total_seconds() / 60)
         minutes_before = vals['minutes_before'] if 'minutes_before' in vals else 0
         minutes_after = vals['minutes_after'] if 'minutes_before' in vals else 0
-
         zoom_date_begin = date_begin - timedelta(minutes=minutes_before)
         zoom_date_end = date_end + timedelta(minutes=minutes_after)
         zoom_duration = int((zoom_date_end - zoom_date_begin).total_seconds() / 60)
@@ -165,9 +170,13 @@ class EventEvent(models.Model):
         date_tz = vals['date_tz'] if 'date_tz' in vals else self.env.user.tz
         date_begin = \
             datetime.strptime(vals['date_begin'], "%Y-%m-%d %H:%M:%S") if 'date_begin' in vals else self.date_begin
+        duration = vals['duration'] if 'duration' in vals else 0
+        if 'duration' in vals and 'date_end' not in vals:
+            vals['date_end'] = datetime.strftime(date_begin + timedelta(minutes=duration), "%Y-%m-%d %H:%M:%S")
         date_end = \
             datetime.strptime(vals['date_end'], "%Y-%m-%d %H:%M:%S") if 'date_end' in vals else self.date_end
-        duration = int((date_end - date_begin).total_seconds() / 60)
+        if duration == 0:
+            vals['duration'] = int((date_end - date_begin).total_seconds() / 60)
         minutes_before = vals['minutes_before'] if 'minutes_before' in vals else self.minutes_before
         minutes_after = vals['minutes_after'] if 'minutes_before' in vals else self.minutes_after
 
